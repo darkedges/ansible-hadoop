@@ -21,4 +21,12 @@
       <name>mapred.job.tracker</name> 
       <value>{{ groups['hadoop-master'][0] }}{{ hadoop_domain }}:9001</value> 
    </property> 
+
+{% if hadoop_install_mode == "single" %}
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+
+{% endif%}
 </configuration>

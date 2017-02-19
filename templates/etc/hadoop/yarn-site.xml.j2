@@ -43,4 +43,11 @@
         <value>{{ inventory_hostname }}{{ hadoop_domain }}</value>
     </property>
 
+{% if hadoop_install_mode=="single" %}
+    <property>
+        <name>yarn.nodemanager.aux-services</name>
+        <value>mapreduce_shuffle</value>
+    </property>
+    
+{% endif%}
 </configuration>

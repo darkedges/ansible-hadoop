@@ -1,0 +1,17 @@
+---
+
+- name: restartNameNode
+  service: name=namenode state=restarted
+  when: ( inventory_hostname in groups['hadoop-master'] ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' )
+
+- name: restartDataNode
+  service: name=datanode state=restarted
+  when: ( ( inventory_hostname in groups['hadoop-slaves'] ) or ( hadoop_install_mode == "single") ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' )
+
+- name: restartNodeManager
+  service: name=nodemanager state=restarted
+  when: ( inventory_hostname in groups['hadoop-master'] ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' )
+
+- name: restartResourceManager
+  service: name=resourcemanager state=restarted
+  when: ( ( inventory_hostname in groups['hadoop-slaves'] ) or ( hadoop_install_mode == "single") ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' )
