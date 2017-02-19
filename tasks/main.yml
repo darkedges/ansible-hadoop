@@ -1,0 +1,166 @@
+---
+
+- debug: msg="Hadoop install"
+
+- name: Create service account for Hadoop
+  user: name={{ hadoop_user }}
+        system=yes
+        shell={{ hadoop_user_shell }}
+        generate_ssh_key=yes
+        state=present
+        groups="{{ hadoop_user_groups | join(',') }}"
+
+- name: Create service account for Yarn
+  user: name={{ yarn_user }}
+        system=yes
+        shell={{ hadoop_user_shell }}
+        generate_ssh_key=yes
+        state=present
+        groups="{{ yarn_user_groups | join(',') }}"
+
+- name: Create service account for MapRed
+  user: name={{ mapred_user }}
+        system=yes
+        shell={{ mapred_user_shell }}
+        generate_ssh_key=yes
+        state=present
+        groups="{{ mapred_user_groups | join(',') }}"
+
+- name: Download Hadoop distribution
+  get_url: url="{{ hadoop_url }}"
+           dest="/tmp/{{ hadoop_src_file }}"
+           checksum="{{ hadoop_url_md5 }}"
+
+- name: Extract Hadoop distribution
+  unarchive: src="/tmp/{{ hadoop_src_file }}"
+             dest="{{ hadoop_usr_parent_dir }}"
+             copy=no
+             creates="{{ hadoop_usr_parent_dir }}/hadoop-{{ hadoop_version }}"
+             owner="{{ hadoop_user }}"
+             group="{{ hadoop_user }}"
+
+- name: Setup Hadoop distribution symlinks
+  file: src="{{ item.src }}"
+        dest="{{ item.dest }}"
+        state=link
+  with_items:
+    - { src: "{{ hadoop_usr_parent_dir }}/hadoop-{{ hadoop_version }}", dest: "{{ hadoop_usr_dir }}" }
+    - { src: "{{ hadoop_usr_parent_dir }}/hadoop-{{ hadoop_version }}/etc/hadoop", dest: "{{ hadoop_conf_dir }}" }
+
+- name: Create Hadoop configurations
+  template: src="{{ item.src }}"
+            dest="{{ item.dest }}"
+            mode=0644
+  with_items:
+    - { src: "etc/hadoop/hadoop-env.sh.j2", dest: "{{ hadoop_conf_dir }}/hadoop-env.sh" }
+    - { src: "etc/hadoop/yarn-env.sh.j2", dest: "{{ hadoop_conf_dir }}/yarn-env.sh" }
+    - { src: "etc/hadoop/core-site.xml.j2", dest: "{{ hadoop_conf_dir }}/core-site.xml" }
+    - { src: "etc/hadoop/hdfs-site.xml.j2", dest: "{{ hadoop_conf_dir }}/hdfs-site.xml" }
+    - { src: "etc/hadoop/mapred-site.xml.j2", dest: "{{ hadoop_conf_dir }}/mapred-site.xml" }
+    - { src: "etc/hadoop/yarn-site.xml.j2", dest: "{{ hadoop_conf_dir }}/yarn-site.xml" }
+
+- name: Create Hadoop configurations - master
+  template: src="{{ item.src }}"
+            dest="{{ item.dest }}"
+            mode=0644
+  with_items:
+    - { src: "etc/hadoop/slaves.j2", dest: "{{ hadoop_conf_dir }}/slaves" }
+  when: "inventory_hostname in groups['hadoop-master']"
+
+- name: create hdfs namenode data directory
+  file: path={{ hadoop_namenode_dir }} 
+        state=directory 
+        owner={{ hadoop_user }} 
+        group={{ hadoop_user }}
+  when: "inventory_hostname in groups['hadoop-master']"
+
+- name: format the namenode - WILL NOT FORMAT IF  current/VERSION EXISTS TO AVOID DATA LOSS
+  shell: ". /etc/profile && ./bin/hdfs namenode -format"
+  args:
+    creates: "{{ hadoop_namenode_dir }}/current/VERSION"
+    executable: "/usr/bin/bash"
+    chdir: "{{ hadoop_usr_dir }}"
+  become_user: "{{ hadoop_user }}"
+  when: "inventory_hostname in groups['hadoop-master']"
+
+- name: download master hadoop public key
+  fetch: src="~{{ hadoop_user }}/.ssh/id_rsa.pub"
+         dest="/tmp/{{inventory_hostname }}-id_rsa.pub"
+         flat=yes
+
+- name: add master hadoop public key
+  authorized_key: user="{{ hadoop_user }}" 
+                  state=present 
+                  key="{{ lookup('file', '/tmp/{{ item }}-id_rsa.pub') }}"
+  with_items: 
+    - "{{ groups['hadoop'] }}"
+
+- name: get Hosts public key
+  shell: "ssh-keyscan -t ssh-rsa {{ item }}"
+  register: known_hosts
+  with_items: 
+    - "{{ groups['hadoop'] }}"
+
+- name: add Hosts public key
+  known_hosts: name="{{ item.item }}"
+               key="{{ item.stdout }}"
+               path=/etc/ssh/ssh_known_hosts
+               state=present
+  with_items: 
+    - "{{ known_hosts.results }}"
+
+- name: Add path to profile (only if CentOS or RHEL)
+  template: src=etc/profile.d/hadoop.sh.j2
+            dest="/etc/profile.d/hadoop.sh"
+            mode=0644
+  when: hadoop_install_path and (ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux')
+
+- name: Add 'namenode.service' (only if CentOS or RHEL)
+  template: src="{{ item.src }}"
+            dest="{{ item.dest }}"
+            mode=0644
+  with_items:
+    - src: etc/systemd/system/namenode.service.j2
+      dest: /etc/systemd/system/namenode.service
+    - src: etc/systemd/system/resourcemanager.service.j2
+      dest:  /etc/systemd/system/resourcemanager.service
+  when: ( inventory_hostname in groups['hadoop-master'] ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' )
+
+- name: Ensure hadoop directory exists
+  file: path="{{ item }}"
+        state=directory
+        owner="{{ hadoop_user }}"
+        group="{{ hadoop_user }}"
+        mode=0770
+  with_items:
+    - "{{ hadoop_run_dir }}"
+    - "{{ hadoop_log_dir }}"
+
+- name: start 'namenode.service'
+  service: name="{{ item }}"
+           state=started
+           enabled=yes
+  with_items:
+    - namenode
+    - resourcemanager         
+  when: ( inventory_hostname in groups['hadoop-master'] ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' )        
+
+- name: Add 'datanode.service' (only if CentOS or RHEL)
+  template: src="{{ item.src }}"
+            dest="{{ item.dest }}"
+            mode=0644
+  with_items:
+    - src: etc/systemd/system/datanode.service.j2
+      dest: /etc/systemd/system/datanode.service
+    - src: etc/systemd/system/nodemanager.service.j2
+      dest:  /etc/systemd/system/nodemanager.service
+  when: ( inventory_hostname in groups['hadoop-slaves'] ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' )
+
+- name: start 'datanode.service'
+  service: name="{{ item }}"
+           state=started
+           enabled=yes
+  with_items:
+    - datanode
+    - nodemanager
+  when: ( inventory_hostname in groups['hadoop-slaves'] ) and ( ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' ) 

@@ -1,0 +1,3 @@
+{% for server in groups['hadoop-slaves'] %}
+{{ server }}{{ hadoop_domain }}
+{% endfor %}

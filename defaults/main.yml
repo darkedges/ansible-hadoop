@@ -1,0 +1,34 @@
+---
+
+hadoop_version: 2.7.3
+
+hadoop_mirror: http://apache.mirror.digitalpacific.com.au
+hadoop_src_file: "hadoop-{{ hadoop_version }}.tar.gz"
+hadoop_url: "{{ hadoop_mirror }}/hadoop/common/hadoop-{{ hadoop_version }}/{{ hadoop_src_file }}"
+hadoop_url_md5: "md5:3455bb57e4b4906bbea67b58cca78fa8"
+
+
+hadoop_usr_parent_dir: "/usr/lib"  
+hadoop_usr_dir: "{{ hadoop_usr_parent_dir }}/hadoop"   
+hadoop_lib_dir: "/var/lib/hadoop"
+hadoop_log_dir: "/var/log/hadoop"
+hadoop_run_dir: "/run/hadoop"
+hadoop_conf_dir: /etc/hadoop
+hadoop_namenode_dir: "{{ hadoop_usr_dir }}/dfs/name"
+
+
+hadoop_user: "hadoop"        
+hadoop_user_shell: "/usr/bin/bash"  
+hadoop_user_groups: []    
+
+yarn_user: "yarn"        
+yarn_user_shell: "/usr/bin/bash"  
+yarn_user_groups: [hadoop]    
+
+mapred_user: "mapred"        
+mapred_user_shell: "/usr/bin/bash"  
+mapred_user_groups: [hadoop]  
+
+hadoop_install_path: yes
+
+hadoop_domain:
